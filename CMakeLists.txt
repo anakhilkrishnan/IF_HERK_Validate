@@ -27,13 +27,17 @@ if(IFV_FETCH_AMREX)
         GIT_TAG        development
         GIT_SHALLOW    TRUE)
     FetchContent_MakeAvailable(amrex)
+    list(APPEND CMAKE_MODULE_PATH "${amrex_SOURCE_DIR}/Tools/CMake")
 else()
     find_package(AMReX REQUIRED COMPONENTS ${IFV_DIM}D)
 endif()
 
+if(NOT COMMAND setup_target_for_cuda_compilation)
+    include(AMReXTargetHelpers)
+endif()
+
 if(AMReX_GPU_BACKEND STREQUAL "CUDA")
     enable_language(CUDA)
-    include(AMReXTargetHelpers)   # setup_target_for_cuda_compilation
 endif()
 
 # mark a target's sources for the active GPU backend (no-op on CPU builds)

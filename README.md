@@ -42,7 +42,7 @@ IF_HERK_Validate/
 # against an installed AMReX
 cmake -S . -B build -DIFV_DIM=3 -DAMReX_ROOT=/path/to/amrex/install
 # or fetch AMReX in-tree
-cmake -S . -B build -DIFV_DIM=3 -DIFV_FETCH_AMREX=ON [-DAMReX_GPU_BACKEND=CUDA]
+cmake -S . -B build -DIFV_DIM=3 -DIFV_FETCH_AMREX=ON [-DAMReX_GPU_BACKEND=CUDA -DCMAKE_CUDA_ARCHITECTURES=86]
 cmake --build build -j
 ```
 
