@@ -3,3 +3,6 @@ build*/
 Build*/
 exec*/
 Exec*/
+
+# Ignore result files
+*_run/*

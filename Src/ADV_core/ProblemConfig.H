@@ -55,7 +55,7 @@ struct ProblemConfig
 
     static ProblemConfig fromParmParse ()
     {
-        ProblemConfig c;
+        ProblemConfig cfg;
 
         {
             amrex::ParmParse pp("geom");
@@ -63,54 +63,54 @@ struct ProblemConfig
             if (pp.queryarr("n_cell", nc)) {
                 AMREX_ALWAYS_ASSERT_WITH_MESSAGE(nc.size() >= AMREX_SPACEDIM,
                     "geom.n_cell needs AMREX_SPACEDIM entries");
-                for (int d = 0; d < AMREX_SPACEDIM; ++d) { c.n_cell[d] = nc[d]; }
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.n_cell[d] = nc[d]; }
             }
-            pp.query("Lx", c.Lx);
-            pp.query("max_grid_size", c.max_grid_size);
+            pp.query("Lx",cfg.Lx);
+            pp.query("max_grid_size",cfg.max_grid_size);
         }
         {
             amrex::ParmParse pp("prob");
-            pp.query("problem", c.problem);
+            pp.query("problem",cfg.problem);
             amrex::Vector<amrex::Real> cv;
             if (pp.queryarr("c", cv)) {
                 AMREX_ALWAYS_ASSERT_WITH_MESSAGE(cv.size() >= AMREX_SPACEDIM,
                     "prob.c needs AMREX_SPACEDIM entries");
-                for (int d = 0; d < AMREX_SPACEDIM; ++d) { c.adv_vel[d] = cv[d]; }
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.adv_vel[d] = cv[d]; }
             }
-            pp.query("nu", c.nu);
+            pp.query("nu",cfg.nu);
         }
         {
             amrex::ParmParse pp("ic");
-            pp.query("type", c.ic_type);
+            pp.query("type",cfg.ic_type);
             amrex::Vector<int> act;
             if (pp.queryarr("active", act)) {
                 AMREX_ALWAYS_ASSERT_WITH_MESSAGE(act.size() >= AMREX_SPACEDIM,
                     "ic.active needs AMREX_SPACEDIM entries");
-                for (int d = 0; d < AMREX_SPACEDIM; ++d) { c.ic_active[d] = act[d]; }
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.ic_active[d] = act[d]; }
             }
-            pp.query("noise_amp", c.noise_amp);
-            pp.query("seed_amp", c.seed_amp);
+            pp.query("noise_amp",cfg.noise_amp);
+            pp.query("seed_amp",cfg.seed_amp);
         }
         {
             amrex::ParmParse pp("time");
-            pp.query("T", c.T);
-            pp.query("dt_max", c.dt_max);
-            pp.query("n_levels", c.n_levels);
+            pp.query("T",cfg.T);
+            pp.query("dt_max",cfg.dt_max);
+            pp.query("n_levels",cfg.n_levels);
         }
         {
             amrex::ParmParse pp("ifherk");
-            pp.query("n_IF", c.n_IF);
-            pp.query("IF_eps", c.IF_eps);
+            pp.query("n_IF",cfg.n_IF);
+            pp.query("IF_eps",cfg.IF_eps);
         }
         {
             amrex::ParmParse pp("out");
-            pp.query("dir", c.out_dir);
-            pp.query("write_plotfile", c.write_plotfile);
-            pp.query("verbose", c.verbose);
+            pp.query("dir",cfg.out_dir);
+            pp.query("write_plotfile",cfg.write_plotfile);
+            pp.query("verbose",cfg.verbose);
         }
 
-        c.validate();
-        return c;
+        cfg.validate();
+        return cfg;
     }
 
     void validate () const

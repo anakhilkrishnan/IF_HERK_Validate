@@ -19,4 +19,4 @@ ifherk.n_IF   = 0                           # 0: automatic from IF_eps
 ifherk.IF_eps = 1.0e-13
 
 out.dir            = adv_run
-out.write_plotfile = 0
+out.write_plotfile = 1
