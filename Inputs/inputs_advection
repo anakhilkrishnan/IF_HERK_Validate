@@ -1,0 +1,22 @@
+# Case 1: scalar linear convection-diffusion, c = [c c c]
+# Expected: 3rd order in dt (linear order of the scheme)
+
+geom.n_cell        = 64 64 64
+geom.Lx            = 6.283185307179586      # 2 pi; dx = Lx / n_cell[0]
+geom.max_grid_size = 32
+
+prob.problem = linear_advection
+prob.c       = 1.0 1.0 1.0
+prob.nu      = 0.05
+
+ic.type = modes
+
+time.T        = 1.0
+time.dt_max   = 0.04                        # CFL = sum|c| dt / dx = 1.22 < sqrt(3)
+time.n_levels = 5
+
+ifherk.n_IF   = 0                           # 0: automatic from IF_eps
+ifherk.IF_eps = 1.0e-13
+
+out.dir            = adv_run
+out.write_plotfile = 0

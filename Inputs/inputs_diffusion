@@ -1,0 +1,23 @@
+# Case 1, sub-case c = 0: pure diffusion
+# Expected: error independent of dt, at round-off / IF-truncation level.
+# Broadband noise is added because the IF must be exact at every wavenumber.
+
+geom.n_cell        = 64 64 64
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 32
+
+prob.problem = linear_advection
+prob.c       = 0.0 0.0 0.0
+prob.nu      = 0.05
+
+ic.type      = modes
+ic.noise_amp = 0.5
+
+time.T        = 1.0
+time.dt_max   = 0.04
+time.n_levels = 5
+
+ifherk.n_IF   = 0
+ifherk.IF_eps = 1.0e-13
+
+out.dir = diff_run

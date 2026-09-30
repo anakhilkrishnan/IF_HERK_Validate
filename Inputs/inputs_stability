@@ -1,0 +1,24 @@
+# Linear stability limit: CFL = sum|c| dt / dx = sqrt(3) for the central
+# stencil. nu = 0 so the IF damping does not move the boundary.
+# A 1e-6 seed at the (k,k,k), k dx = pi/2 mode sits on the limit.
+#
+# Run once on each side of the limit (dx = 2 pi / 64):
+#   ./adv3d.ex Inputs/inputs_stability                                    # CFL 1.83: seed grows
+#   ./adv3d.ex Inputs/inputs_stability time.dt_max=0.05 out.dir=stab_ok   # CFL 1.53: stays bounded
+
+geom.n_cell        = 64 64 64
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 32
+
+prob.problem = linear_advection
+prob.c       = 1.0 1.0 1.0
+prob.nu      = 0.0
+
+ic.type     = modes
+ic.seed_amp = 1.0e-6
+
+time.T        = 30.0
+time.dt_max   = 0.06
+time.n_levels = 1
+
+out.dir = stab_run

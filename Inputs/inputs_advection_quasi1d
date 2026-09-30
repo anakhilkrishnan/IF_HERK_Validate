@@ -1,0 +1,23 @@
+# Case 1 in a thin domain: phi0 depends on x only (ic.active = 1 0 0).
+# Cheap runs in the 3D build; results should match a true 1D build.
+# Thin directions must be at least n_IF cells thick (checked at start-up).
+
+geom.n_cell        = 128 16 16
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 64
+
+prob.problem = linear_advection
+prob.c       = 1.0 1.0 1.0
+prob.nu      = 0.05
+
+ic.type   = modes
+ic.active = 1 0 0
+
+time.T        = 1.0
+time.dt_max   = 0.02                        # CFL = 1.22
+time.n_levels = 5
+
+ifherk.n_IF   = 0
+ifherk.IF_eps = 1.0e-13
+
+out.dir = adv_q1d_run
