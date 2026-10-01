@@ -111,6 +111,10 @@ int main (int argc, char* argv[])
 
         amrex::UtilCreateDirectory(cfg.out_dir, 0755);
         writeNpy(phi0, geom, cfg.out_dir + "/phi0.npy");
+        if (cfg.write_plotfile)
+        {
+            amrex::WriteSingleLevelPlotfile(cfg.out_dir + "/plt_ic", phi0, {"phi"}, geom, 0.0, 0);
+        }
 
         for (int l = 0; l < cfg.n_levels; ++l)
         {
