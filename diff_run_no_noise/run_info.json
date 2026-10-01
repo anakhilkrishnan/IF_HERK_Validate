@@ -1,0 +1,20 @@
+{
+  "spacedim": 3,
+  "problem": "linear_advection",
+  "n_cell": [64, 64, 64],
+  "dx": [0.098174770424681035, 0.098174770424681035, 0.098174770424681035],
+  "c": [0, 0, 0],
+  "nu": 0.050000000000000003,
+  "T": 1,
+  "n_IF": 8,
+  "IF_eps": 1e-13,
+  "ic": {"type": "modes", "noise_amp": 0, "seed_amp": 0},
+  "phi0": "phi0.npy",
+  "runs": [
+    {"level": 0, "dt": 0.040000000000000001, "nsteps": 25, "cfl": 0, "wall_s": 1.6418771329999999, "file": "phi_l0.npy"},
+    {"level": 1, "dt": 0.02, "nsteps": 50, "cfl": 0, "wall_s": 3.2099648670000001, "file": "phi_l1.npy"},
+    {"level": 2, "dt": 0.01, "nsteps": 100, "cfl": 0, "wall_s": 5.9167399500000002, "file": "phi_l2.npy"},
+    {"level": 3, "dt": 0.0050000000000000001, "nsteps": 200, "cfl": 0, "wall_s": 11.576618885, "file": "phi_l3.npy"},
+    {"level": 4, "dt": 0.0025000000000000001, "nsteps": 400, "cfl": 0, "wall_s": 24.793518965999997, "file": "phi_l4.npy"}
+  ]
+}

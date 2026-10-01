@@ -117,7 +117,7 @@ def main():
         if not pure_diffusion:
             d = np.array(dts)
             plt.loglog(d, einf[-1] * (d / d[-1]) ** 3, "k--", label="slope 3")
-        plt.xlabel("dt"); plt.ylabel("error"); plt.legend(); plt.grid(True, which="both")
+        plt.xlabel(r"$\Delta t$"); plt.ylabel("Error"); plt.legend(); plt.grid(True, which="both")
         out = os.path.join(args.run_dir, "convergence.png")
         plt.savefig(out, dpi=150)
         print(f"wrote {out}")
