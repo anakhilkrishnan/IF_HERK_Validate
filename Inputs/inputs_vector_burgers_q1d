@@ -1,0 +1,24 @@
+# Case 2.2 consistency check, quasi-1D: U = [u(x), 0, 0].
+# Pair with inputs_scalar_burgers_q1d, then
+#   Tools/check_reduction.py vb_q1d sb_q1d
+# u must equal the scalar phi, and v, w must stay zero, to round-off.
+
+geom.n_cell        = 128 16 16
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 64
+
+prob.problem = vector_burgers
+prob.nu      = 0.05                         # cell Re ~ 1.7
+
+ic.type   = quasi1d
+ic.active = 1 0 0
+ic.mean   = 0.5
+
+time.T        = 1.0
+time.dt_max   = 0.02
+time.n_levels = 4
+
+ifherk.n_IF   = 0
+ifherk.IF_eps = 1.0e-13
+
+out.dir = vb_q1d

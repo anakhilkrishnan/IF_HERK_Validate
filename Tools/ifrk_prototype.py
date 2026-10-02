@@ -3,8 +3,8 @@
 NumPy mirror of ScalarStepper::advance, for debugging.
 
 Same tableau, same shifted coefficients, same truncated separable IF kernel
-(exp(-2a) I_n(2a), n <= n_IF), same central-advection stencil, same register
-order. Run it on an IF_HERK_Validate run directory and it replays every level
+(exp(-2a) I_n(2a), n <= n_IF), same stencils (operators.py), same register
+order. Scalar problems only (linear advection, scalar Burgers). Run it on an IF_HERK_Validate run directory and it replays every level
 from phi0.npy and compares with the C++ phi(T):
 
   * C++ vs mirror at round-off  -> the C++ implements the intended algorithm
@@ -16,11 +16,13 @@ formulation. Pure Python loops over stages; use small or quasi-1D grids.
 Usage:  ifrk_prototype.py RUN_DIR [--levels N]
 """
 import argparse
-import json
-import os
+
+import sys
 
 import numpy as np
 from scipy.special import ive
+
+import operators as ops
 
 R3 = np.sqrt(3.0)
 A = np.array([[0.0, 0.0, 0.0],
@@ -57,21 +59,14 @@ def apply_if(f, alpha, n_if):
     return f
 
 
-def N_linear(phi, c, dx):
-    out = np.zeros_like(phi)
-    for ax in range(phi.ndim):
-        out += c[ax] * (np.roll(phi, -1, axis=ax) - np.roll(phi, 1, axis=ax)) / (2.0 * dx[ax])
-    return out
-
-
-def advance(phi, dt, nu, c, dx, n_if):
+def advance(phi, dt, nu, c, dx, n_if, N=ops.N_linear):
     s, at, _, gap = shifted_tableau()
     alpha = gap * dt * nu / dx[0] ** 2
     w = [None] * (s + 1)
     q = phi.copy()
     stage = phi.copy()
     for i in range(1, s + 1):
-        g = -at[i, i] * dt * N_linear(stage, c, dx)
+        g = -at[i, i] * dt * N(stage, c, dx)
         if i > 1:
             q = apply_if(q, alpha[i - 1], n_if)
             for j in range(1, i):
@@ -90,9 +85,11 @@ def main():
     ap.add_argument("--levels", type=int, default=None, help="replay only the first N levels")
     args = ap.parse_args()
 
-    with open(os.path.join(args.run_dir, "run_info.json")) as f:
-        info = json.load(f)
-    phi0 = np.load(os.path.join(args.run_dir, info["phi0"]))
+    info, init = ops.load_run(args.run_dir)
+    if info["problem"] not in ops.N_BY_PROBLEM:
+        sys.exit(f"ifrk_prototype.py: scalar problems only, not '{info['problem']}'")
+    N = ops.N_BY_PROBLEM[info["problem"]]
+    phi0 = init["phi"]
     dx, c, nu, n_if = info["dx"], info["c"], info["nu"], info["n_IF"]
 
     runs = info["runs"][: args.levels] if args.levels else info["runs"]
@@ -100,8 +97,8 @@ def main():
     for run in runs:
         phi = phi0.copy()
         for _ in range(run["nsteps"]):
-            phi = advance(phi, run["dt"], nu, c, dx, n_if)
-        cpp = np.load(os.path.join(args.run_dir, run["file"]))
+            phi = advance(phi, run["dt"], nu, c, dx, n_if, N)
+        cpp = ops.load_fields(args.run_dir, run)["phi"]
         print(f"{run['dt']:10.3e} {np.max(np.abs(cpp - phi)):18.3e}")
 
 

@@ -12,6 +12,9 @@ ScalarStepper::ScalarStepper (const amrex::Geometry& geom_in, const amrex::BoxAr
       adv_vel(cfg.adv_vel),
       ifherk(getRKButcher(), geom_in, cfg.nu, dt, cfg.n_IF, cfg.IF_eps)
 {
+    // the kernel branches in computeGStage cover the scalar problems only
+    AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!cfg.isVector(), "ScalarStepper: problem is a vector problem");
+
     n_ghost = std::max(ifherk.nGhostRequired(), 1);
 
     // Periodic FillBoundary is only trusted here for ghost widths up to one

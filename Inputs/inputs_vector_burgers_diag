@@ -1,0 +1,24 @@
+# Case 2.2 consistency check, full 3D: U = g(i+j+k)[1 1 1].
+# Pair with inputs_scalar_burgers_diag, then
+#   Tools/check_reduction.py vb_diag sb_diag
+# Every component must equal the scalar phi to round-off. Exercises all
+# three face types and every stencil direction (but omega = 0).
+
+geom.n_cell        = 32 32 32
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 16
+
+prob.problem = vector_burgers
+prob.nu      = 0.25                         # cell Re ~ 1.6
+
+ic.type = diagonal
+ic.mean = 0.5
+
+time.T        = 1.0
+time.dt_max   = 0.04                        # CFL ~ 1.2
+time.n_levels = 4
+
+ifherk.n_IF   = 0
+ifherk.IF_eps = 1.0e-13
+
+out.dir = vb_diag

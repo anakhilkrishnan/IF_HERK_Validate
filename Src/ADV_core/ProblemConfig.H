@@ -18,8 +18,15 @@
 // Case 1, scalar linear convection-diffusion:
 //     dphi/dt + c . grad(phi) = nu lap(phi)
 // with c = 0 giving the pure-diffusion sub-case.
-// Case 2.1 scalar Burgers equation
+// Case 2.1 scalar Burgers equation:
+//     dphi/dt + div(1/2 phi^2 c) = nu lap(phi)       (c: direction weights)
+// Case 2.2 vector Burgers equation (face-centred, 2D/3D builds only):
+//     dU/dt + (U . grad) U = nu lap(U),  in rotational form
+//     (U . grad) U = omega x U + grad(1/2 |U|^2), as in LGF_NSE_GPU
 // ---------------------------------------------------------------------------
+
+enum class ProblemType { LinearAdvection, ScalarBurgers, VectorBurgers };
+enum class ICType      { Modes, Diagonal, Quasi1D };
 
 struct ProblemConfig
 {
@@ -37,9 +44,11 @@ struct ProblemConfig
     amrex::Real nu = 0.05;
 
     // ---- initial condition --------------------------------------------------
-    std::string ic_type   = "modes";   // "modes": smooth multi-mode field (see InitialCondition.H)
+    std::string ic_type   = "modes";   // "modes" | "diagonal" | "quasi1d" (see InitialCondition.H)
     amrex::IntVect ic_active {AMREX_D_DECL(1, 1, 1)};   // 0: phi0 independent of that direction
     amrex::Real ic_mean = 0.0; // adding mean flow to create both translation and attenuation in burgers
+    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> ic_mean_vec {AMREX_D_DECL(0.4, 0.3, 0.2)}; // vector "modes" means
+    amrex::IntVect ic_stagger {AMREX_D_DECL(0, 0, 0)}; // scalar only: 1 samples that direction at faces
     amrex::Real noise_amp = 0.0;       // broadband, deterministic noise (pure-diffusion test)
     amrex::Real seed_amp  = 0.0;       // (k,k,k) mode at k dx = pi/2 (stability test)
 
@@ -47,6 +56,7 @@ struct ProblemConfig
     amrex::Real T        = 1.0;        // final time
     amrex::Real dt_max   = 0.04;       // coarsest dt
     int         n_levels = 5;          // dt_l = dt_max / 2^l, l = 0 .. n_levels-1
+    int         ref_refine = 0;        // > 0: extra reference run at dt_min / 2^ref_refine
     int         n_IF     = 0;          // IF half-width; <= 0 -> automatic from IF_eps
     amrex::Real IF_eps   = 1.0e-13;    // kernel truncation tolerance
 
@@ -91,6 +101,18 @@ struct ProblemConfig
                 for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.ic_active[d] = act[d]; }
             }
             pp.query("mean", cfg.ic_mean);
+            amrex::Vector<amrex::Real> mv;
+            if (pp.queryarr("mean_vec", mv)) {
+                AMREX_ALWAYS_ASSERT_WITH_MESSAGE(mv.size() >= AMREX_SPACEDIM,
+                    "ic.mean_vec needs AMREX_SPACEDIM entries");
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.ic_mean_vec[d] = mv[d]; }
+            }
+            amrex::Vector<int> stg;
+            if (pp.queryarr("stagger", stg)) {
+                AMREX_ALWAYS_ASSERT_WITH_MESSAGE(stg.size() >= AMREX_SPACEDIM,
+                    "ic.stagger needs AMREX_SPACEDIM entries");
+                for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.ic_stagger[d] = stg[d]; }
+            }
             pp.query("noise_amp",cfg.noise_amp);
             pp.query("seed_amp",cfg.seed_amp);
         }
@@ -99,6 +121,7 @@ struct ProblemConfig
             pp.query("T",cfg.T);
             pp.query("dt_max",cfg.dt_max);
             pp.query("n_levels",cfg.n_levels);
+            pp.query("ref_refine",cfg.ref_refine);
         }
         {
             amrex::ParmParse pp("ifherk");
@@ -118,9 +141,31 @@ struct ProblemConfig
 
     void validate () const
     {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE((problem == "linear_advection" || problem == "scalar_burgers"),
-            "prob.problem: only 'linear_advection' and 'scalar_burgers' are implemented");
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ic_type == "modes", "ic.type: only 'modes' is implemented");
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(problem == "linear_advection" || problem == "scalar_burgers"
+                                         || problem == "vector_burgers",
+            "prob.problem: 'linear_advection', 'scalar_burgers' or 'vector_burgers'");
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ic_type == "modes" || ic_type == "diagonal" || ic_type == "quasi1d",
+            "ic.type: 'modes', 'diagonal' or 'quasi1d'");
+#if AMREX_SPACEDIM == 1
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(!isVector(),
+            "vector_burgers needs a 2D or 3D build (the NSE stencils assume >= 2D)");
+#endif
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(icType() != ICType::Quasi1D || isVector(),
+            "ic.type = quasi1d is the vector field [u(x), 0, 0]; for the scalar use "
+            "ic.type = modes with ic.active = 1 0 0 (and ic.stagger = 1 0 0 to match the vector run)");
+        if (icType() == ICType::Diagonal) {
+            for (int d = 1; d < AMREX_SPACEDIM; ++d) {
+                AMREX_ALWAYS_ASSERT_WITH_MESSAGE(n_cell[d] == n_cell[0],
+                    "ic.type = diagonal needs equal n_cell (periodic along x + y + z)");
+            }
+        }
+        if (isVector()) {
+            for (int d = 0; d < AMREX_SPACEDIM; ++d) {
+                AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ic_stagger[d] == 0,
+                    "ic.stagger is for scalar runs only (vector components are already staggered)");
+            }
+        }
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ref_refine >= 0, "time.ref_refine must be >= 0");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(Lx > 0.0, "geom.Lx must be positive");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(nu >= 0.0, "prob.nu must be non-negative");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(T > 0.0 && dt_max > 0.0 && n_levels >= 1,
@@ -129,6 +174,24 @@ struct ProblemConfig
             AMREX_ALWAYS_ASSERT_WITH_MESSAGE(n_cell[d] > 0, "geom.n_cell must be positive");
         }
     }
+
+    ProblemType problemType () const
+    {
+        if (problem == "scalar_burgers") { return ProblemType::ScalarBurgers; }
+        if (problem == "vector_burgers") { return ProblemType::VectorBurgers; }
+        return ProblemType::LinearAdvection;
+    }
+    bool isVector () const { return problemType() == ProblemType::VectorBurgers; }
+
+    ICType icType () const
+    {
+        if (ic_type == "diagonal") { return ICType::Diagonal; }
+        if (ic_type == "quasi1d")  { return ICType::Quasi1D; }
+        return ICType::Modes;
+    }
+
+    // level index of the optional reference run (dt_min / 2^ref_refine)
+    int refLevel () const { return n_levels - 1 + ref_refine; }
 
     amrex::Real dx () const { return Lx / n_cell[0]; }
 

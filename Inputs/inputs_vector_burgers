@@ -1,0 +1,24 @@
+# Case 2.2: vector Burgers, generic 3D field (non-zero vorticity, mean flow)
+# Expected: 2nd order in dt, by self-convergence against a dt_min/16 run.
+# This is the only Burgers test that exercises omega x U; the exact checks
+# are the quasi1d and diagonal pairs (Tools/check_reduction.py).
+
+geom.n_cell        = 64 64 64
+geom.Lx            = 6.283185307179586
+geom.max_grid_size = 32
+
+prob.problem = vector_burgers
+prob.nu      = 0.1                          # cell Re = max|u| dx / nu ~ 1.9
+
+ic.type     = modes
+ic.mean_vec = 0.4 0.3 0.2
+
+time.T          = 1.0
+time.dt_max     = 0.02                      # CFL = sum_d max|u_d| dt / dx ~ 1.1
+time.n_levels   = 4
+time.ref_refine = 4                         # reference run at dt_min / 16
+
+ifherk.n_IF   = 0
+ifherk.IF_eps = 1.0e-13
+
+out.dir = vb_run

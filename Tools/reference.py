@@ -2,78 +2,113 @@
 """
 Errors and observed orders for an IF_HERK_Validate run directory.
 
-Case 1, scalar linear convection-diffusion (c = 0: pure diffusion).
-The reference is the exact solution of the SEMI-DISCRETE system,
+The reference depends on the problem (read from run_info.json):
 
-    dphi/dt = L phi,   L = -c . D0 + nu * Lap_h,
+  linear_advection   Exact solution of the semi-discrete system, mode by mode
+                     in Fourier space, from the sampled initial field and the
+                     symbols of the stencils actually used:
+                       central advection  -> i sum_d c_d sin(k_d dx_d) / dx_d
+                       Laplacian          -> -sum_d 4 sin^2(k_d dx_d / 2) / dx_d^2
+                     Expected: order 3 (c = 0: error independent of dt).
 
-obtained mode by mode in Fourier space from the sampled phi0.npy the run
-wrote, with the symbols of the stencils actually used:
+  scalar_burgers     The same semi-discrete system (operators.py) integrated
+                     by scipy's DOP853 at tight tolerance -- an integrator
+                     completely independent of the C++. Expected: order 2.
 
-    central advection   D0_d  ->  i sin(k_d dx_d) / dx_d
-    7-point Laplacian   Lap_h ->  -sum_d 4 sin^2(k_d dx_d / 2) / dx_d^2
+  vector_burgers     No independent reference exists in 3D, so the run is
+                     compared with its own reference run at dt_min / 2^m
+                     (time.ref_refine = m). Expected: order 2. The exact
+                     checks for this case are in check_reduction.py.
 
-Because the spatial operator is identical, every bit of the error is
-temporal (plus IF truncation, bounded by IF_eps per application).
+In all cases the spatial operator is the same as the code's, so every bit of
+the measured error is temporal.
 
-Usage:  reference.py RUN_DIR [--plot]
+Usage:  reference.py RUN_DIR [--plot] [--save-ref]
 """
 import argparse
-import json
 import os
 import sys
 
 import numpy as np
 
+import operators as ops
 
-def semi_discrete_symbol(shape, dx, c, nu):
-    """lambda(k) on the FFT grid of an array with the given shape."""
-    lam = np.zeros(shape, dtype=complex)
-    for d, (n, h) in enumerate(zip(shape, dx)):
-        k = 2.0 * np.pi * np.fft.fftfreq(n, d=h)
-        kd = k * h
+EXPECTED = {"linear_advection": 3, "scalar_burgers": 2, "vector_burgers": 2}
+
+
+def fourier_reference(phi0, dx, c, nu, T):
+    lam = np.zeros(phi0.shape, dtype=complex)
+    for d, (n, h) in enumerate(zip(phi0.shape, dx)):
+        kd = 2.0 * np.pi * np.fft.fftfreq(n, d=h) * h
         term = -1j * c[d] * np.sin(kd) / h - nu * 4.0 * np.sin(0.5 * kd) ** 2 / h**2
-        bshape = [1] * len(shape)
+        bshape = [1] * phi0.ndim
         bshape[d] = n
         lam = lam + term.reshape(bshape)
-    return lam
-
-
-def reference_solution(phi0, dx, c, nu, T):
-    lam = semi_discrete_symbol(phi0.shape, dx, c, nu)
     return np.real(np.fft.ifftn(np.fft.fftn(phi0) * np.exp(lam * T)))
+
+
+def ode_reference(phi0, dx, c, nu, T, N):
+    from scipy.integrate import solve_ivp
+    shape = phi0.shape
+
+    def rhs(_t, y):
+        p = y.reshape(shape)
+        return (-N(p, c, dx) + nu * ops.laplacian(p, dx)).ravel()
+
+    sol = solve_ivp(rhs, (0.0, T), phi0.ravel(), method="DOP853", rtol=1e-13, atol=1e-13)
+    if not sol.success:
+        sys.exit(f"reference.py: solve_ivp failed: {sol.message}")
+    print(f"(reference: DOP853, {sol.nfev} right-hand-side evaluations)")
+    return sol.y[:, -1].reshape(shape)
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_dir")
     ap.add_argument("--plot", action="store_true", help="log-log error vs dt (needs matplotlib)")
+    ap.add_argument("--save-ref", action="store_true", help="save the reference as ref_<field>.npy")
     args = ap.parse_args()
 
-    with open(os.path.join(args.run_dir, "run_info.json")) as f:
-        info = json.load(f)
+    info, init = ops.load_run(args.run_dir)
+    problem = info["problem"]
+    dx, c, nu, T, n_cell = info["dx"], info["c"], info["nu"], info["T"], info["n_cell"]
 
-    if info["problem"] != "linear_advection":
-        sys.exit(f"reference.py: no reference for problem '{info['problem']}' yet")
+    # ---- reference ------------------------------------------------------------
+    if problem == "linear_advection":
+        ref = {"phi": fourier_reference(init["phi"], dx, c, nu, T)}
+    elif problem == "scalar_burgers":
+        ref = {"phi": ode_reference(init["phi"], dx, c, nu, T, ops.N_scalar_burgers)}
+    elif problem == "vector_burgers":
+        if info.get("reference_run") is None:
+            sys.exit("reference.py: vector_burgers needs a reference run; set time.ref_refine "
+                     "(e.g. 4 for dt_min/16)")
+        ref = ops.load_fields(args.run_dir, info["reference_run"])
+        print(f"(reference: own run at dt = {info['reference_run']['dt']:.4e}; "
+              f"self-convergence, not independent)")
+    else:
+        sys.exit(f"reference.py: unknown problem '{problem}'")
 
-    phi0 = np.load(os.path.join(args.run_dir, info["phi0"]))
-    dx, c, nu, T = info["dx"], info["c"], info["nu"], info["T"]
-    ref = reference_solution(phi0, dx, c, nu, T)
-    scale = np.max(np.abs(ref))
+    # face-centred fields: count every periodic point once
+    ref = {k: ops.drop_duplicate_faces(v, n_cell) for k, v in ref.items()}
+    if args.save_ref:
+        for k, v in ref.items():
+            np.save(os.path.join(args.run_dir, f"ref_{k}.npy"), v)
 
-    pure_diffusion = all(abs(cd) == 0.0 for cd in c)
-    print(f"{info['spacedim']}D, n_cell = {info['n_cell']}, c = {c}, nu = {nu}, T = {T}, "
-          f"n_IF = {info['n_IF']}, IF_eps = {info['IF_eps']:.1e}")
-    print(f"max|ref| = {scale:.4e}\n")
+    scale = max(np.max(np.abs(v)) for v in ref.values())
+    pure_diffusion = problem == "linear_advection" and all(cd == 0.0 for cd in c)
+
+    print(f"{problem}, {info['spacedim']}D, n_cell = {n_cell}, nu = {nu}, T = {T}, "
+          f"n_IF = {info['n_IF']}, cell Re = {info.get('cell_re', float('nan')):.2f}")
+    print(f"fields = {info['fields']}, max|ref| = {scale:.4e}\n")
     print(f"{'dt':>10} {'CFL':>7} {'steps':>6} {'Linf err':>11} {'order':>6} {'L2 err':>11} {'order':>6}")
 
     dts, einf, el2 = [], [], []
     for run in info["runs"]:
-        phi = np.load(os.path.join(args.run_dir, run["file"]))
-        diff = phi - ref
+        fld = {k: ops.drop_duplicate_faces(v, n_cell) for k, v in ops.load_fields(args.run_dir, run).items()}
+        # max over fields; L2 = rms over all points of all fields
+        einf.append(max(np.max(np.abs(fld[k] - ref[k])) for k in ref))
+        el2.append(np.sqrt(np.mean(np.concatenate([((fld[k] - ref[k]) ** 2).ravel() for k in ref]))))
         dts.append(run["dt"])
-        einf.append(np.max(np.abs(diff)))
-        el2.append(np.sqrt(np.mean(diff**2)))
 
         def order(e):
             if pure_diffusion or len(e) < 2 or e[-1] == 0.0 or e[-2] == 0.0:
@@ -85,26 +120,27 @@ def main():
 
     print()
     if pure_diffusion:
-        print("Pure diffusion: the error should be independent of dt, at the "
-              "round-off / IF-truncation level.")
+        print("Pure diffusion: the error should sit at the round-off / IF-truncation level for")
+        print("every dt (IF truncation at the coarsest dt, accumulated round-off at the finest).")
         print(f"  max Linf error = {max(einf):.3e} (relative {max(einf) / scale:.3e})")
-    else:
-        if len(dts) >= 2:
-            p = np.polyfit(np.log(dts), np.log(einf), 1)[0]
-            print(f"Least-squares order (Linf, all levels): {p:.2f}   (expected: 3 for linear advection)")
+    elif len(dts) >= 2:
+        p = np.polyfit(np.log(dts), np.log(einf), 1)[0]
+        print(f"Least-squares order (Linf, all levels): {p:.2f}   (expected: {EXPECTED[problem]})")
         if any(r["cfl"] > np.sqrt(3.0) for r in info["runs"]):
-            print("Note: levels with CFL > sqrt(3) are beyond the linear stability limit.")
+            print("Note: levels with CFL > sqrt(3) are beyond the inviscid linear stability limit "
+                  "(the IF damping can still keep them stable).")
 
     seed = info.get("ic", {}).get("seed_amp", 0.0)
-    if seed != 0.0:
+    if seed != 0.0 and "phi" in init:
         # amplitude of the (k,k,k), k dx = pi/2 mode the stability seed excites;
         # the semi-discrete system (nu = 0) keeps it at exactly 1
+        phi0 = init["phi"]
         if all(n % 4 == 0 for n in phi0.shape):
             m = tuple(n // 4 for n in phi0.shape)
             a0 = abs(np.fft.fftn(phi0)[m])
             print("\nStability seed, (k,k,k) mode with k dx = pi/2:")
             for run in info["runs"]:
-                aT = abs(np.fft.fftn(np.load(os.path.join(args.run_dir, run["file"])))[m])
+                aT = abs(np.fft.fftn(ops.load_fields(args.run_dir, run)["phi"])[m])
                 verdict = "GROWS" if aT > 1.01 * a0 else "bounded"
                 print(f"  CFL {run['cfl']:.3f}: |a(T)| / |a(0)| = {aT / a0:.3e}   ({verdict})")
         else:
@@ -116,8 +152,9 @@ def main():
         plt.loglog(dts, el2, "s-", label="L2")
         if not pure_diffusion:
             d = np.array(dts)
-            plt.loglog(d, einf[-1] * (d / d[-1]) ** 3, "k--", label="slope 3")
-        plt.xlabel(r"$\Delta t$"); plt.ylabel("Error"); plt.legend(); plt.grid(True, which="both")
+            q = EXPECTED[problem]
+            plt.loglog(d, einf[-1] * (d / d[-1]) ** q, "k--", label=f"slope {q}")
+        plt.xlabel("dt"); plt.ylabel("error"); plt.legend(); plt.grid(True, which="both")
         out = os.path.join(args.run_dir, "convergence.png")
         plt.savefig(out, dpi=150)
         print(f"wrote {out}")

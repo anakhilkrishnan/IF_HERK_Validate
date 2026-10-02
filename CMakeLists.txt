@@ -32,6 +32,9 @@ else()
     find_package(AMReX REQUIRED COMPONENTS ${IFV_DIM}D)
 endif()
 
+# setup_target_for_cuda_compilation. An in-tree AMReX (fetched) has already
+# defined it while configuring itself -- CMake functions are global. An
+# installed AMReX only puts the module on CMAKE_MODULE_PATH, so include it then.
 if(NOT COMMAND setup_target_for_cuda_compilation)
     include(AMReXTargetHelpers)
 endif()
