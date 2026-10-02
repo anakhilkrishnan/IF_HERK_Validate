@@ -6,3 +6,4 @@ Exec*/
 
 # Ignore result files
 *_run*/*
+__pycache__

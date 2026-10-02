@@ -21,4 +21,4 @@ time.n_levels = 4
 ifherk.n_IF   = 0
 ifherk.IF_eps = 1.0e-13
 
-out.dir = vb_q1d
+out.dir = vb_q1d_run
