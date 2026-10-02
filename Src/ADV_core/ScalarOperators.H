@@ -34,8 +34,20 @@ amrex::Real linearAdvectionCentral (int i, int j, int k,
     return adv;
 }
 
-// Next: scalar Burgers, conservative central flux
-//   N(u) = sum_d (u_{+1}^2 - u_{-1}^2) / (4 dx_d)
-// which the quasi-1D vector-Burgers run must reproduce to round-off.
+// scalar Burgers flux
+//   N(u) = sum_d dim_sel_d (u_{+1}^2 - u_{-1}^2) / (4 dx_d)
+AMREX_GPU_DEVICE AMREX_FORCE_INLINE
+amrex::Real scalarBurgersCentral (int i, int j, int k,
+                                    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& dim_sel,
+                                    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> const& invdx,
+                                    amrex::Array4<amrex::Real const> const& phi)
+{
+    amrex::ignore_unused(j, k);
+    amrex::Real adv = 0.0;
+    AMREX_D_TERM(adv += dim_sel[0] * 0.25 * invdx[0] * (phi(i+1,j,k) * phi(i+1,j,k) - phi(i-1,j,k) * phi(i-1,j,k));,
+                 adv += dim_sel[1] * 0.25 * invdx[1] * (phi(i,j+1,k) * phi(i,j+1,k) - phi(i,j-1,k) * phi(i,j-1,k));,
+                 adv += dim_sel[2] * 0.25 * invdx[2] * (phi(i,j,k+1) * phi(i,j,k+1) - phi(i,j,k-1) * phi(i,j,k-1));)
+    return adv;
+}
 
 #endif

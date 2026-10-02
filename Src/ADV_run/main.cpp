@@ -30,7 +30,8 @@ namespace {
 
 void writeRunInfo (const ProblemConfig& cfg, const amrex::Geometry& geom,
                    const IFHERK& ifh, const amrex::Vector<amrex::Real>& dts,
-                   const amrex::Vector<int>& nsteps, const amrex::Vector<amrex::Real>& wall)
+                   const amrex::Vector<int>& nsteps, const amrex::Vector<amrex::Real>& wall,
+                   const amrex::Real cfl_write)
 {
     if (!amrex::ParallelDescriptor::IOProcessor()) { return; }
 
@@ -57,9 +58,9 @@ void writeRunInfo (const ProblemConfig& cfg, const amrex::Geometry& geom,
     f << "  \"phi0\": \"phi0.npy\",\n";
     f << "  \"runs\": [\n";
     for (int l = 0; l < dts.size(); ++l)
-    {
+    {   
         f << "    {\"level\": " << l << ", \"dt\": " << dts[l] << ", \"nsteps\": " << nsteps[l]
-          << ", \"cfl\": " << cfg.cfl(dts[l]) << ", \"wall_s\": " << wall[l]
+          << ", \"cfl\": " << cfl_write << ", \"wall_s\": " << wall[l]
           << ", \"file\": \"phi_l" << l << ".npy\"}" << (l + 1 < dts.size() ? "," : "") << "\n";
     }
     f << "  ]\n}\n";
@@ -115,6 +116,9 @@ int main (int argc, char* argv[])
         {
             amrex::WriteSingleLevelPlotfile(cfg.out_dir + "/plt_ic", phi0, {"phi"}, geom, 0.0, 0);
         }
+        amrex::Real abs_max_phi0 = phi0.norm0(0, 0, false);
+        amrex::Real cfl_print = 0.0;
+        amrex::Real cellRe_print = cfg.cellRe(abs_max_phi0);
 
         for (int l = 0; l < cfg.n_levels; ++l)
         {
@@ -137,16 +141,27 @@ int main (int argc, char* argv[])
 
             if (cfg.verbose > 0)
             {
+                
+                if (cfg.problem == "linear_advection")
+                {
+                    cfl_print = cfg.cfl(dts[l]);
+                }
+                else if (cfg.problem == "scalar_burgers")
+                {
+                    cfl_print = cfg.cfl(dts[l], abs_max_phi0);
+                }
+                
                 amrex::Print() << std::scientific << std::setprecision(4)
                                << "  level " << l << ": dt = " << dts[l]
-                               << ", CFL = " << cfg.cfl(dts[l])
+                               << ", Cell Reynolds = " << cellRe_print
+                               << ", CFL = " << cfl_print
                                << ", steps = " << nsteps[l]
                                << ", max|phi(T)| = " << phi.norm0(0, 0, false)
                                << ", wall = " << wall[l] << " s\n";
             }
         }
 
-        writeRunInfo(cfg, geom, stepper.integrator(), dts, nsteps, wall);
+        writeRunInfo(cfg, geom, stepper.integrator(), dts, nsteps, wall, cfl_print);
         amrex::Print() << "Wrote " << cfg.out_dir << "/ ; run Tools/reference.py "
                        << cfg.out_dir << " for errors and orders\n";
     }

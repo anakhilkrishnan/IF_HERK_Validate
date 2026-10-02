@@ -38,6 +38,7 @@ struct ICParams
     amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> dx;
     amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> L;
     amrex::GpuArray<int,         AMREX_SPACEDIM> active;
+    amrex::Real mean;
     amrex::Real noise_amp;
     amrex::Real seed_amp;
 };
@@ -72,7 +73,8 @@ amrex::Real initialPhi (int i, int j, int k,
         X[d] = p.active[d] ? twopi * x / p.L[d] : 0.0;
     }
 
-    amrex::Real phi = std::sin(X[0] + 0.3) * std::cos(2.0 * X[1])
+    amrex::Real phi = p.mean 
+                    + std::sin(X[0] + 0.3) * std::cos(2.0 * X[1])
                     + 0.5  * std::sin(3.0 * X[2])
                     + 0.25 * std::sin(2.0 * X[0] + X[2]);
 
@@ -96,6 +98,7 @@ inline ICParams makeICParams (const amrex::Geometry& geom, const ProblemConfig& 
         p.L[d]      = geom.ProbLength(d);
         p.active[d] = cfg.ic_active[d];
     }
+    p.mean = cfg.ic_mean;
     p.noise_amp = cfg.noise_amp;
     p.seed_amp  = cfg.seed_amp;
     return p;

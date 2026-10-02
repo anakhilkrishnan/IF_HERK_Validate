@@ -1,0 +1,24 @@
+# Case 2.1: Scalar burgers;
+# Expected 2nd order accuracy in dt
+
+geom.n_cell        = 32 32 32
+geom.Lx            = 6.283185307179586      # 2 pi; dx = Lx / n_cell[0]
+geom.max_grid_size = 16
+
+prob.problem = scalar_burgers
+prob.c       = 1.0 1.0 1.0
+prob.nu      = 0.25
+
+ic.type = modes
+ic.mean = 0.5
+ic.active = 1 1 1
+
+time.T        = 1.0
+time.dt_max   = 0.04
+time.n_levels = 5
+
+ifherk.n_IF   = 0                           # 0: automatic from IF_eps
+ifherk.IF_eps = 1.0e-13
+
+out.dir            = sclr_brgrs_run
+out.write_plotfile = 1

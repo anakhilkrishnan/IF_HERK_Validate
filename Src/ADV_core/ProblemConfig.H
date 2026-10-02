@@ -18,6 +18,7 @@
 // Case 1, scalar linear convection-diffusion:
 //     dphi/dt + c . grad(phi) = nu lap(phi)
 // with c = 0 giving the pure-diffusion sub-case.
+// Case 2.1 scalar Burgers equation
 // ---------------------------------------------------------------------------
 
 struct ProblemConfig
@@ -31,13 +32,14 @@ struct ProblemConfig
     int            max_grid_size = 32;
 
     // ---- physics ------------------------------------------------------------
-    std::string problem = "linear_advection";            // only case implemented so far
+    std::string problem = "linear_advection";
     amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> adv_vel {AMREX_D_DECL(1.0, 1.0, 1.0)};
     amrex::Real nu = 0.05;
 
     // ---- initial condition --------------------------------------------------
     std::string ic_type   = "modes";   // "modes": smooth multi-mode field (see InitialCondition.H)
     amrex::IntVect ic_active {AMREX_D_DECL(1, 1, 1)};   // 0: phi0 independent of that direction
+    amrex::Real ic_mean = 0.0; // adding mean flow to create both translation and attenuation in burgers
     amrex::Real noise_amp = 0.0;       // broadband, deterministic noise (pure-diffusion test)
     amrex::Real seed_amp  = 0.0;       // (k,k,k) mode at k dx = pi/2 (stability test)
 
@@ -88,6 +90,7 @@ struct ProblemConfig
                     "ic.active needs AMREX_SPACEDIM entries");
                 for (int d = 0; d < AMREX_SPACEDIM; ++d) {cfg.ic_active[d] = act[d]; }
             }
+            pp.query("mean", cfg.ic_mean);
             pp.query("noise_amp",cfg.noise_amp);
             pp.query("seed_amp",cfg.seed_amp);
         }
@@ -115,8 +118,8 @@ struct ProblemConfig
 
     void validate () const
     {
-        AMREX_ALWAYS_ASSERT_WITH_MESSAGE(problem == "linear_advection",
-            "prob.problem: only 'linear_advection' is implemented");
+        AMREX_ALWAYS_ASSERT_WITH_MESSAGE((problem == "linear_advection" || problem == "scalar_burgers"),
+            "prob.problem: only 'linear_advection' and 'scalar_burgers' are implemented");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(ic_type == "modes", "ic.type: only 'modes' is implemented");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(Lx > 0.0, "geom.Lx must be positive");
         AMREX_ALWAYS_ASSERT_WITH_MESSAGE(nu >= 0.0, "prob.nu must be non-negative");
@@ -146,6 +149,21 @@ struct ProblemConfig
         amrex::Real s = 0.0;
         for (int d = 0; d < AMREX_SPACEDIM; ++d) { s += std::abs(adv_vel[d]); }
         return s * dt_in / dx();
+    }
+
+    // cfl overload for scalar burgers
+    amrex::Real cfl (amrex::Real dt_in, amrex::Real phi_max) const
+    {
+        amrex::Real s = 0.0;
+        // selects the correct directions
+        for (int d = 0; d < AMREX_SPACEDIM; ++d) { s += std::abs(adv_vel[d]); }
+        return s * phi_max * dt_in / dx();
+    }   
+
+    // compute cell-Re
+    amrex::Real cellRe(amrex::Real phi_max) const
+    {
+        return phi_max * dx() / nu;
     }
 };
 

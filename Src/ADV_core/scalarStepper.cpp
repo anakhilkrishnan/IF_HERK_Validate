@@ -7,7 +7,8 @@
 ScalarStepper::ScalarStepper (const amrex::Geometry& geom_in, const amrex::BoxArray& ba,
                               const amrex::DistributionMapping& dm, const ProblemConfig& cfg,
                               amrex::Real dt)
-    : geom(geom_in),
+    : problem(cfg.problem),
+      geom(geom_in),
       adv_vel(cfg.adv_vel),
       ifherk(getRKButcher(), geom_in, cfg.nu, dt, cfg.n_IF, cfg.IF_eps)
 {
@@ -55,10 +56,22 @@ void ScalarStepper::computeGStage (const amrex::MultiFab& st, int i)
         auto const& g_arr = w[i].array(mfi);
         auto const& phi   = st.const_array(mfi);
 
-        amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i2, int j2, int k2)
+        // branch for scalar burgers and linear convection
+        if (problem == "linear_advection")
         {
-            g_arr(i2,j2,k2) = coef * linearAdvectionCentral(i2, j2, k2, c, invdx, phi);
-        });
+            amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i2, int j2, int k2)
+            {
+                g_arr(i2,j2,k2) = coef * linearAdvectionCentral(i2, j2, k2, c, invdx, phi);
+            });
+        }
+        else if (problem == "scalar_burgers")
+        {
+            amrex::ParallelFor(bx, [=] AMREX_GPU_DEVICE (int i2, int j2, int k2)
+            {
+                g_arr(i2,j2,k2) = coef * scalarBurgersCentral(i2, j2, k2, c, invdx, phi);
+            });
+        }
+        
     }
 }
 

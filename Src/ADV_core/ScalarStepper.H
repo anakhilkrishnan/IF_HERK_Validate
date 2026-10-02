@@ -5,6 +5,8 @@
 #include <AMReX_MultiFab.H>
 #include <AMReX_Vector.H>
 
+#include <string>
+
 #include <IFHERK.H>
 #include <ProblemConfig.H>
 
@@ -43,8 +45,10 @@ public:
     void computeGStage (const amrex::MultiFab& st, int i);
 
 private:
+
+    std::string problem;
     amrex::Geometry geom;
-    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> adv_vel;
+    amrex::GpuArray<amrex::Real, AMREX_SPACEDIM> adv_vel; // serves as direction selector for scalar burgers
 
     IFHERK ifherk;
     int n_ghost = 1;
