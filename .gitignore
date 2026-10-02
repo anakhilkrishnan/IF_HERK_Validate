@@ -5,4 +5,4 @@ exec*/
 Exec*/
 
 # Ignore result files
-*_run/*
+*_run*/*
